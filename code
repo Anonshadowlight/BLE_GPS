@@ -1,0 +1,143 @@
+/*******************************************************************************************
+  This is an example of the nRF8001 Bluetooth Low Energy Breakout with GPS Ultimate Breakout
+********************************************************************************************/
+
+// This version uses the internal data queing so you can treat it like Serial (kinda)!
+
+#include <SPI.h>
+#include "Adafruit_BLE_UART.h"
+#include <AltSoftSerial.h>
+#include <GPSport.h>
+#include <NMEAGPS.h>
+
+AltSoftSerial gpsport; // pin 8 to GPS TX (data from GPS to Arduino), pin 9 to GPS RX (from Arduino to GPS)
+
+NMEAGPS  gps; // This parses the GPS characters
+gps_fix  fix; // This holds on to the latest values
+
+// Connect CLK/MISO/MOSI to hardware SPI
+// e.g. On UNO & compatible: CLK = 13, MISO = 12, MOSI = 11
+#define ADAFRUITBLE_REQ 10
+#define ADAFRUITBLE_RDY 2     // This should be an interrupt pin, on Uno thats #2 or #3
+#define ADAFRUITBLE_RST 7
+
+const int buttonPin = 6;    // the number of the pushbutton pin
+const int GPSTXPin = 8;
+int buttonState = 0;             // the current reading from the input pin
+
+Adafruit_BLE_UART BTLEserial = Adafruit_BLE_UART(ADAFRUITBLE_REQ, ADAFRUITBLE_RDY, ADAFRUITBLE_RST);
+/**************************************************************************/
+/*!
+    Configure the Arduino and start advertising with the radio
+*/
+/**************************************************************************/
+void setup(void)
+{
+  Serial.begin(9600);
+  BTLEserial.setDeviceName("0111"); /* 7 characters max! */
+  BTLEserial.begin();
+  DEBUG_PORT.begin(9600);
+  while (!Serial);
+  gpsPort.begin(9600);
+  pinMode(buttonPin, INPUT);
+  pinMode(GPSTXPin, OUTPUT);
+}
+
+/**************************************************************************/
+/*!
+    Constantly checks for new events on the nRF8001
+*/
+/**************************************************************************/
+aci_evt_opcode_t laststatus = ACI_EVT_DISCONNECTED;
+
+void loop()
+{
+  // Tell the nRF8001 to do whatever it should be working on.
+  BTLEserial.pollACI();
+
+  // read the state of the switch into a local variable:
+  buttonState = digitalRead(buttonPin);
+
+  // Ask what is our current status
+  aci_evt_opcode_t status = BTLEserial.getState();
+  // If the status changed....
+  if (status != laststatus) {
+    // print it out!
+    if (status == ACI_EVT_DEVICE_STARTED) {
+      Serial.println(F("* Advertising started"));
+    }
+    if (status == ACI_EVT_CONNECTED) {
+      Serial.println(F("* Connected!"));
+    }
+    if (status == ACI_EVT_DISCONNECTED) {
+      Serial.println(F("* Disconnected or advertising timed out"));
+    }
+    // OK set the last status change to this one
+    laststatus = status;
+  }
+
+  if (status == ACI_EVT_CONNECTED) {
+    /*
+        // Lets see if there's any data for us!
+        if (BTLEserial.available()) {
+          Serial.print("* "); Serial.print(BTLEserial.available()); Serial.println(F(" bytes available from BTLE"));
+        }
+        // OK while we still have something to read, get a character and print it out
+        while (BTLEserial.available()) {
+          char c = BTLEserial.read();
+          Serial.print(c);
+        }
+    */
+
+    if (gps.available( gpsport )) {
+      fix = gps.read();
+      // Next up, see if we have any data to get from the Serial console
+    }
+
+    // only toggle the GPSTXPin if the new button state is HIGH
+    if (buttonState == HIGH) {
+      digitalWrite(GPSTXPin, HIGH);
+
+      Serial.setTimeout(100); // 100 millisecond timeout
+      String test = String("Coordinates ");
+
+      // We need to convert the line to bytes, no more than 20 at this time
+      uint8_t sendbuffertst[20];
+      test.getBytes(sendbuffertst, 20);
+      char sendbuffersizetst = min(20, test.length());
+
+      Serial.print((char *)sendbuffertst); Serial.println();
+
+      // write the data
+      BTLEserial.write(sendbuffertst, sendbuffersizetst);
+
+      Serial.setTimeout(100); // 100 millisecond timeout
+      String l1 = String(fix.latitude(), 4);
+      String lat = String(" Lat" + l1 + " ");
+
+      // We need to convert the line to bytes, no more than 20 at this time
+      uint8_t sendbufferlat[20];
+      lat.getBytes(sendbufferlat, 20);
+      char sendbuffersizelat = min(20, lat.length());
+
+      Serial.print((char *)sendbufferlat); Serial.println();
+
+      // write the data
+      BTLEserial.write(sendbufferlat, sendbuffersizelat);
+
+      String l2 = String(fix.longitude(), 4);
+      String lon = String(" Lon" + l2 + " ");
+      // We need to convert the line to bytes, no more than 20 at this time
+      uint8_t sendbufferlon[20];
+      lon.getBytes(sendbufferlon, 20);
+      char sendbuffersizelon = min(20, lon.length());
+
+      Serial.print((char *)sendbufferlon); Serial.println();
+
+      // write the data
+      BTLEserial.write(sendbufferlon, sendbuffersizelon);
+    } else {
+      digitalWrite(GPSTXPin, LOW);
+    }
+  }
+}
