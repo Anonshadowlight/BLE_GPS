@@ -1,6 +1,6 @@
-/*******************************************************************************************
-  This is an example of the nRF8001 Bluetooth Low Energy Breakout with GPS Ultimate Breakout
-********************************************************************************************/
+/**********************************************************************************************
+nRF8001 Bluetooth Low Energy Breakout with Adafruit GPS Ultimate Breakout and activation button
+**********************************************************************************************/
 
 // This version uses the internal data queing so you can treat it like Serial (kinda)!
 
